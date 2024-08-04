@@ -2,7 +2,7 @@
 
 ## Description
 
-This is a simple encryption tool.
+This is a simple text encryption tool.
 
 It could to be make, edit and view encrypted text.
 
