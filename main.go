@@ -253,6 +253,63 @@ func decodeCmd(cmd *cobra.Command, args []string) {
 	fmt.Println(decryptedContent)
 }
 
+// `env` コマンドの実装
+func envCmd(cmd *cobra.Command, args []string) {
+	if len(args) < 1 {
+		fmt.Println("Please specify a secret file.")
+		return
+	}
+	secretFile := args[0]
+	privateKeyData, err := ioutil.ReadFile("private.key")
+	if err != nil {
+		fmt.Printf("Error: %v\n", err)
+		return
+	}
+	passphrase, err := promptPassword("Enter passphrase for private key: ")
+	if err != nil {
+		fmt.Printf("Error: %v\n", err)
+		return
+	}
+
+	decryptedContent, err := decryptPgpFile(secretFile, string(privateKeyData), passphrase)
+	if err != nil {
+		fmt.Printf("Error: %v\n", err)
+		return
+	}
+
+	// 環境変数を設定
+	for _, line := range strings.Split(decryptedContent, "\n") {
+		if strings.TrimSpace(line) == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) != 2 {
+			fmt.Printf("# Invalid line: %s\n", line)
+			continue
+		}
+		key := strings.TrimSpace(parts[0])
+		value := strings.TrimSpace(parts[1])
+		os.Setenv(key, value)
+	}
+
+	// 新しいシェルを起動
+	shell := os.Getenv("SHELL")
+	if shell == "" {
+		shell = "/bin/sh"
+	}
+
+	shellCmd := exec.Command(shell)
+	shellCmd.Stdin = os.Stdin
+	shellCmd.Stdout = os.Stdout
+	shellCmd.Stderr = os.Stderr
+	shellCmd.Env = os.Environ()
+
+	err = shellCmd.Run()
+	if err != nil {
+		fmt.Printf("Error starting new shell: %v\n", err)
+	}
+}
+
 func main() {
 	var rootCmd = &cobra.Command{Use: "vlt"}
 	var initCommand = &cobra.Command{
@@ -272,7 +329,13 @@ func main() {
 		Args:  cobra.ExactArgs(1),
 		Run:   decodeCmd,
 	}
+	var envCommand = &cobra.Command{
+		Use:   "env [secret_file]",
+		Short: "Set environment variables from a secret file",
+		Args:  cobra.MinimumNArgs(1),
+		Run:   envCmd,
+	}
 
-	rootCmd.AddCommand(initCommand, editCommand, decodeCommand)
+	rootCmd.AddCommand(initCommand, editCommand, decodeCommand, envCommand)
 	rootCmd.Execute()
 }
